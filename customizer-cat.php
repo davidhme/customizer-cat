@@ -66,13 +66,9 @@ function fca_cc_set_php( $php ) {
 
 function fca_cc_options_page() {
 	if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
-		$css        = $_REQUEST[ FCA_CC_KEY_CSS ];
-		$javascript = $_REQUEST[ FCA_CC_KEY_JAVASCRIPT ];
-		$php        = $_REQUEST[ FCA_CC_KEY_PHP ];
-
-		$css        = stripslashes( $css );
-		$javascript = stripslashes( $javascript );
-		$php        = stripslashes( $php );
+		$css        = stripslashes( $_REQUEST[ FCA_CC_KEY_CSS ] );
+		$javascript = stripslashes( $_REQUEST[ FCA_CC_KEY_JAVASCRIPT ] );
+		$php        = stripslashes( $_REQUEST[ FCA_CC_KEY_PHP ] );
 
 		fca_cc_set_css( $css );
 		fca_cc_set_javascript( $javascript );
