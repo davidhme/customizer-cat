@@ -64,7 +64,62 @@ function fca_cc_set_php( $php ) {
 	}
 }
 
+function fca_cc_list_all_plugin_files( $root_dir = null ) {
+	if ( is_null( $root_dir ) ) {
+		$root_dir = realpath( dirname( __FILE__ ) . '/..' );
+	}
+
+	$contents = array();
+
+	foreach ( scandir( $root_dir ) as $path ) {
+		if ( $path === '.' || $path === '..' || $path === '.git' ) {
+			continue;
+		}
+
+		$full_path = $root_dir . '/' . $path;
+
+		$item = array(
+			'text' => $path,
+			'data' => array( 'path' => $full_path )
+		);
+
+		if ( is_dir( $full_path ) ) {
+			$item['children'] = fca_cc_list_all_plugin_files( $full_path );
+			$item['icon']     = 'dashicons dashicons-category';
+		} else {
+			if ( ! in_array( pathinfo($path, PATHINFO_EXTENSION), array( 'php', 'js', 'css' ) ) ) {
+				continue;
+			}
+			$item['icon']           = 'dashicons dashicons-media-default';
+			$item['data']['editor'] = 'text';
+		}
+
+		$contents[] = $item;
+	}
+
+	return $contents;
+}
+
+function fca_cc_handle_action() {
+	if ( $_SERVER['REQUEST_METHOD'] !== 'POST' ) {
+		return;
+	}
+
+	if ( ! empty( $_POST['fca_cc_action'] ) ) {
+		if ( $_POST['fca_cc_action'] === 'read_file' && ! empty( $_POST['fca_cc_file_path'] ) ) {
+			readfile( $_POST['fca_cc_file_path'] );
+		}
+	}
+
+	exit;
+}
+
 function fca_cc_options_page() {
+	$url = plugins_url( FCA_CC_PLUGIN_SLUG );
+
+	wp_enqueue_script( 'jstree', $url . '/lib/jstree/jstree.min.js' );
+	wp_enqueue_style( 'jstree', $url . '/lib/jstree/themes/default/style.min.css' );
+
 	if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 		$css        = stripslashes( $_REQUEST[ FCA_CC_KEY_CSS ] );
 		$javascript = stripslashes( $_REQUEST[ FCA_CC_KEY_JAVASCRIPT ] );
@@ -114,6 +169,47 @@ function fca_cc_options_page() {
 				</tr>
 			</table>
 
+			<hr>
+
+			<table class="form-table">
+				<tr>
+					<td scope="row" width="1">
+						<div id="fca_cc_plugin_list"></div>
+					</td>
+					<td>
+						<textarea id="fca_cc_file_editor" class="fca_cc_file_editor large-text code"></textarea>
+					</td>
+				</tr>
+			</table>
+
+			<style>
+				.fca_cc_file_editor {
+					width: 100%;
+					height: 100%;
+				}
+			</style>
+
+			<script>
+				jQuery( function( $ ) {
+					$( '#fca_cc_plugin_list' ).jstree( {
+						core: {
+							multiple: false,
+							data: <?php echo json_encode( fca_cc_list_all_plugin_files() ) ?>
+						}
+					} ).on( 'changed.jstree', function( event, data ) {
+						var item_data = data.instance.get_node( data.selected[ 0 ] ).data;
+						if ( item_data[ 'editor' ] && item_data[ 'editor' ] === 'text' ) {
+							$.post( window.location.href, {
+								'fca_cc_action': 'read_file',
+								'fca_cc_file_path': item_data[ 'path' ]
+							}, function( result ) {
+								$( '#fca_cc_file_editor' ).text( result.replace(/\t/g, '  ') );
+							} );
+						}
+					} );
+				} );
+			</script>
+
 			<?php submit_button(); ?>
 		</form>
 	</div>
@@ -133,6 +229,7 @@ function fca_cc_head() {
 }
 
 if ( is_admin() ) {
+	add_action( 'admin_init', 'fca_cc_handle_action' );
 	add_options_page( FCA_CC_PLUGIN_NAME, FCA_CC_PLUGIN_NAME, 'manage_options', FCA_CC_PLUGIN_SLUG, 'fca_cc_options_page' );
 } else {
 	$fca_cc_php_file_name = fca_cc_get_php_file_name();
