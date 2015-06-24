@@ -24,6 +24,7 @@ define( 'FCA_CC_PLUGIN_SLUG', strtolower( preg_replace( '/\W+/', '-', FCA_CC_PLU
 define( 'FCA_CC_KEY_CSS', 'fca_cc_custom_css' );
 define( 'FCA_CC_KEY_JAVASCRIPT', 'fca_cc_custom_javascript' );
 define( 'FCA_CC_KEY_PHP', 'fca_cc_custom_php' );
+define( 'FCA_CC_KEY_DISABLE_AUTO_UPDATE', 'fca_cc_disable_auto_update' );
 
 function fca_cc_get_css() {
 	return get_site_option( FCA_CC_KEY_CSS, '' );
@@ -62,6 +63,21 @@ function fca_cc_set_php( $php ) {
 	if ( ! empty( $php ) ) {
 		file_put_contents( $file_name, $php );
 	}
+}
+
+function fca_cc_set_disable_auto_update( $plugin_slugs ) {
+	$plugin_slugs = trim( $plugin_slugs );
+	if ( empty( $plugin_slugs ) ) {
+		return;
+	}
+
+	$plugin_slugs = array_map( 'trim', explode( ',', $plugin_slugs ) );
+
+	update_site_option( FCA_CC_KEY_DISABLE_AUTO_UPDATE, $plugin_slugs );
+}
+
+function fca_cc_get_disable_auto_update() {
+	return get_site_option( FCA_CC_KEY_DISABLE_AUTO_UPDATE, array() );
 }
 
 function fca_cc_list_all_plugin_files( $root_dir = null ) {
@@ -121,13 +137,15 @@ function fca_cc_options_page() {
 	wp_enqueue_style( 'jstree', $url . '/lib/jstree/themes/default/style.min.css' );
 
 	if ( $_SERVER['REQUEST_METHOD'] === 'POST' ) {
-		$css        = stripslashes( $_REQUEST[ FCA_CC_KEY_CSS ] );
-		$javascript = stripslashes( $_REQUEST[ FCA_CC_KEY_JAVASCRIPT ] );
-		$php        = stripslashes( $_REQUEST[ FCA_CC_KEY_PHP ] );
+		$css                 = stripslashes( $_REQUEST[ FCA_CC_KEY_CSS ] );
+		$javascript          = stripslashes( $_REQUEST[ FCA_CC_KEY_JAVASCRIPT ] );
+		$php                 = stripslashes( $_REQUEST[ FCA_CC_KEY_PHP ] );
+		$disable_auto_update = stripslashes( $_REQUEST[ FCA_CC_KEY_DISABLE_AUTO_UPDATE ] );
 
 		fca_cc_set_css( $css );
 		fca_cc_set_javascript( $javascript );
 		fca_cc_set_php( $php );
+		fca_cc_set_disable_auto_update( $disable_auto_update );
 	}
 
 	$css        = esc_html( fca_cc_get_css() );
@@ -231,6 +249,15 @@ function fca_cc_head() {
 if ( is_admin() ) {
 	add_action( 'admin_init', 'fca_cc_handle_action' );
 	add_options_page( FCA_CC_PLUGIN_NAME, FCA_CC_PLUGIN_NAME, 'manage_options', FCA_CC_PLUGIN_SLUG, 'fca_cc_options_page' );
+
+	if ( count( fca_cc_get_disable_auto_update() ) > 0 ) {
+		function fca_cc_auto_update_specific_plugins( $update, $item ) {
+			return in_array( $item->slug, fca_cc_get_disable_auto_update() ) ? false : $update;
+		}
+
+		add_filter( 'auto_update_plugin', 'fca_cc_auto_update_specific_plugins', 10, 2 );
+	}
+
 } else {
 	$fca_cc_php_file_name = fca_cc_get_php_file_name();
 	if ( file_exists( $fca_cc_php_file_name ) ) {
