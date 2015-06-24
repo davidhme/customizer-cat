@@ -82,7 +82,7 @@ function fca_cc_get_disable_auto_update() {
 
 function fca_cc_list_all_plugin_files( $root_dir = null ) {
 	if ( is_null( $root_dir ) ) {
-		$root_dir = realpath( dirname( __FILE__ ) . '/..' );
+		$root_dir = realpath( dirname( __FILE__ ) . '/../../..' );
 	}
 
 	$contents = array();
@@ -93,17 +93,20 @@ function fca_cc_list_all_plugin_files( $root_dir = null ) {
 		}
 
 		$full_path = $root_dir . '/' . $path;
+		$is_dir    = is_dir( $full_path );
 
 		$item = array(
-			'text' => $path,
+			'text' => $path . ( $is_dir
+					? '<i class="fca_cc_list_download dashicons dashicons-download" data-path="' . htmlspecialchars( $full_path ) . '"></i>'
+					: '' ),
 			'data' => array( 'path' => $full_path )
 		);
 
-		if ( is_dir( $full_path ) ) {
+		if ( $is_dir ) {
 			$item['children'] = fca_cc_list_all_plugin_files( $full_path );
 			$item['icon']     = 'dashicons dashicons-category';
 		} else {
-			if ( ! in_array( pathinfo($path, PATHINFO_EXTENSION), array( 'php', 'js', 'css' ) ) ) {
+			if ( ! in_array( pathinfo( $path, PATHINFO_EXTENSION ), array( 'php', 'js', 'css' ) ) ) {
 				continue;
 			}
 			$item['icon']           = 'dashicons dashicons-media-default';
@@ -116,15 +119,59 @@ function fca_cc_list_all_plugin_files( $root_dir = null ) {
 	return $contents;
 }
 
-function fca_cc_handle_action() {
-	if ( $_SERVER['REQUEST_METHOD'] !== 'POST' ) {
+function fca_cc_zip_path( $path ) {
+	if ( ! class_exists( 'ZipArchive' ) ) {
+		echo 'ZipArchive not supported.';
+
 		return;
 	}
 
-	if ( ! empty( $_POST['fca_cc_action'] ) ) {
-		if ( $_POST['fca_cc_action'] === 'read_file' && ! empty( $_POST['fca_cc_file_path'] ) ) {
-			readfile( $_POST['fca_cc_file_path'] );
+	$zip_file_name = tempnam( sys_get_temp_dir(), 'fca_cc_' );
+
+	$zip = new ZipArchive();
+	$zip->open( $zip_file_name, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+
+	/**
+	 * @var SplFileInfo[] $files
+	 */
+	$files = new RecursiveIteratorIterator(
+		new RecursiveDirectoryIterator( $path ), RecursiveIteratorIterator::LEAVES_ONLY
+	);
+
+	$path_len = strlen( $path ) + 1;
+
+	foreach ( $files as $name => $file ) {
+		if ( $file->isDir() ) {
+			continue;
 		}
+
+		$full_path = $file->getRealPath();
+		$zip->addFile( $full_path, substr( $full_path, $path_len ) );
+	}
+
+	$zip->close();
+
+	$fh = fopen( $zip_file_name, 'rb' );
+
+	header( 'Content-Type: application/zip' );
+	header( 'Content-Length: ' . filesize( $zip_file_name ) );
+	header( 'Content-Disposition: attachment; filename=' . basename( $path ) . '.zip' );
+
+	fpassthru( $fh );
+	fclose( $fh );
+
+	unlink( $zip_file_name );
+}
+
+function fca_cc_handle_action() {
+	if ( empty( $_REQUEST['fca_cc_action'] ) ) {
+		return;
+	}
+
+	if ( $_REQUEST['fca_cc_action'] === 'read_file' && ! empty( $_REQUEST['fca_cc_path'] ) ) {
+		readfile( $_REQUEST['fca_cc_path'] );
+	} else if ( $_REQUEST['fca_cc_action'] === 'zip_path' && ! empty( $_REQUEST['fca_cc_path'] ) ) {
+		fca_cc_zip_path( $_REQUEST['fca_cc_path'] );
 	}
 
 	exit;
@@ -191,6 +238,23 @@ function fca_cc_options_page() {
 
 			<table class="form-table">
 				<tr>
+					<th scope="row">Disable plugin auto-update</th>
+					<td>
+						<p>
+							<input type="text" name="<?php echo FCA_CC_KEY_DISABLE_AUTO_UPDATE ?>"
+							       class="large-text code"
+							       value="<?php echo implode( ', ', fca_cc_get_disable_auto_update() ) ?>">
+							<br>
+							(plugin slugs separated by comma)
+						</p>
+					</td>
+				</tr>
+			</table>
+
+			<hr>
+
+			<table class="form-table">
+				<tr>
 					<td scope="row" width="1">
 						<div id="fca_cc_plugin_list"></div>
 					</td>
@@ -205,11 +269,23 @@ function fca_cc_options_page() {
 					width: 100%;
 					height: 100%;
 				}
+
+				div#fca_cc_plugin_list i.dashicons.dashicons-download {
+					font-size: 16px;
+					vertical-align: bottom;
+					display: none;
+				}
+
+				div#fca_cc_plugin_list a.jstree-clicked i.dashicons.dashicons-download {
+					display: inline-block;
+				}
 			</style>
 
 			<script>
 				jQuery( function( $ ) {
-					$( '#fca_cc_plugin_list' ).jstree( {
+					var $list = $( '#fca_cc_plugin_list' );
+
+					$list.jstree( {
 						core: {
 							multiple: false,
 							data: <?php echo json_encode( fca_cc_list_all_plugin_files() ) ?>
@@ -219,10 +295,22 @@ function fca_cc_options_page() {
 						if ( item_data[ 'editor' ] && item_data[ 'editor' ] === 'text' ) {
 							$.post( window.location.href, {
 								'fca_cc_action': 'read_file',
-								'fca_cc_file_path': item_data[ 'path' ]
+								'fca_cc_path': item_data[ 'path' ]
 							}, function( result ) {
-								$( '#fca_cc_file_editor' ).text( result.replace(/\t/g, '  ') );
+								$( '#fca_cc_file_editor' ).text( result.replace( /\t/g, '  ' ) );
 							} );
+						}
+					} );
+
+					$list.click( function( event ) {
+						var $element = $( event.target );
+						if ( $element.hasClass( 'fca_cc_list_download' ) ) {
+							var path = $element.data( 'path' );
+							if ( ! path ) {
+								return;
+							}
+
+							window.location.href += '&fca_cc_action=zip_path&fca_cc_path=' + encodeURIComponent( path );
 						}
 					} );
 				} );
