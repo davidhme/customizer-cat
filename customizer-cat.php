@@ -95,8 +95,17 @@ function fca_cc_list_all_plugin_files( $root_dir = null ) {
 		$full_path = $root_dir . '/' . $path;
 		$is_dir    = is_dir( $full_path );
 
+		$format = '%Y-%m-%d';
+		$ctime  = strftime( $format, filectime( $full_path ) );
+		$mtime  = strftime( $format, filemtime( $full_path ) );
+		$text   = $path .
+		          '<span class="fca_cc_time">' .
+		          '<span class="fca_cc_ctime">' . $ctime . '</span>' .
+		          '<span class="fca_cc_mtime">' . $mtime . '</span>' .
+		          '</span>';
+
 		$item = array(
-			'text' => $path . ( $is_dir
+			'text' => $text . ( $is_dir
 					? '<i class="fca_cc_list_download dashicons dashicons-download" data-path="' . htmlspecialchars( $full_path ) . '"></i>'
 					: '' ),
 			'data' => array( 'path' => $full_path )
@@ -268,6 +277,17 @@ function fca_cc_options_page() {
 				.fca_cc_file_editor {
 					width: 100%;
 					height: 100%;
+				}
+
+				.fca_cc_time {
+					font-size: 70%;
+					opacity: 0.5;
+				}
+
+				.fca_cc_ctime {
+					border-right: 1px solid rgba(0, 0, 0, 0.2);
+					margin: 0 4px;
+					padding-right: 5px;
 				}
 
 				div#fca_cc_plugin_list i.dashicons.dashicons-download {
