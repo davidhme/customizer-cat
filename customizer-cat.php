@@ -359,11 +359,27 @@ if ( is_admin() ) {
 	add_options_page( FCA_CC_PLUGIN_NAME, FCA_CC_PLUGIN_NAME, 'manage_options', FCA_CC_PLUGIN_SLUG, 'fca_cc_options_page' );
 
 	if ( count( fca_cc_get_disable_auto_update() ) > 0 ) {
-		function fca_cc_auto_update_specific_plugins( $update, $item ) {
-			return in_array( $item->slug, fca_cc_get_disable_auto_update() ) ? false : $update;
+		function fca_cc_auto_update_handler( $transient_data ) {
+			$no_update_plugin_files = array();
+
+			foreach ( fca_cc_get_disable_auto_update() as $no_update_slug ) {
+				foreach ( $transient_data->response as $plugin_file => $data ) {
+					if ( $data->slug === $no_update_slug ) {
+						$no_update_plugin_files[] = $plugin_file;
+						break;
+					}
+				}
+			}
+
+			foreach ( $no_update_plugin_files as $plugin_file ) {
+				$transient_data->no_update[ $plugin_file ] = $transient_data->response[ $plugin_file ];
+				unset( $transient_data->response[ $plugin_file ] );
+			}
+
+			return $transient_data;
 		}
 
-		add_filter( 'auto_update_plugin', 'fca_cc_auto_update_specific_plugins', 10, 2 );
+		add_filter( 'site_transient_update_plugins', 'fca_cc_auto_update_handler' );
 	}
 
 } else {
